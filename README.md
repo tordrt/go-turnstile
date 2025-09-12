@@ -8,6 +8,7 @@ Cloudflare Turnstile is an alternative to traditional CAPTCHAs that helps websit
 
 - ✅ **Thread-safe**: Safe for concurrent use by multiple goroutines
 - ✅ **Automatic retries**: Built-in retry logic for transient network failures
+- ✅ **Idempotency protection**: Automatic unique idempotency keys prevent replay attacks
 - ✅ **Structured error handling**: Specific error types for different failure scenarios
 - ✅ **Flexible configuration**: Customizable timeouts, endpoints, and HTTP clients
 - ✅ **Request helpers**: Easy extraction of tokens from HTTP requests
