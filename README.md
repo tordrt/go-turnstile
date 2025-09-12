@@ -17,7 +17,7 @@ Cloudflare Turnstile is an alternative to traditional CAPTCHAs that helps websit
 ## Installation
 
 ```bash
-go get github.com/tordtafjord/go-turnstile
+go get github.com/tordrt/go-turnstile
 ```
 
 ## Quick Start
