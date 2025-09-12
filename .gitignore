@@ -30,3 +30,7 @@ go.work.sum
 # Editor/IDE
 # .idea/
 # .vscode/
+/.idea/modules.xml
+/.idea/go-turnstile.iml
+/.idea/vcs.xml
+/.idea/.gitignore
