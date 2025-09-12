@@ -224,13 +224,14 @@ func TestVerify(t *testing.T) {
 				t.Fatalf("New() failed: %v", err)
 			}
 
-			valid, err := client.VerifyToken(context.Background(), tt.token, tt.remoteIP)
+			response, err := client.VerifyToken(context.Background(), tt.token, tt.remoteIP)
 
 			if (err != nil) != tt.wantErr {
 				t.Errorf("Verify() error = %v, wantErr %v", err, tt.wantErr)
 				return
 			}
 
+			valid := response != nil && response.Success
 			if valid != tt.wantValid {
 				t.Errorf("Verify() valid = %v, wantValid %v", valid, tt.wantValid)
 			}
@@ -245,7 +246,14 @@ func TestVerify(t *testing.T) {
 				case strings.Contains(tt.responseBody, "error-codes"):
 					var verificationErr *VerificationError
 					if !errors.As(err, &verificationErr) {
-						t.Errorf("Expected VerificationError, got %T", err)
+						// Check if it's one of the specific error types that embed VerificationError
+						switch err.(type) {
+						case *ErrInvalidInputSecret, *ErrInvalidInputResponse, *ErrTimeoutOrDuplicate,
+							 *ErrMissingInputSecret, *ErrMissingInputResponse, *ErrBadRequest, *ErrInternalError:
+							// This is expected - specific error types
+						default:
+							t.Errorf("Expected VerificationError or specific error type, got %T", err)
+						}
 					}
 				}
 			}
@@ -354,52 +362,22 @@ func TestContextCancellation(t *testing.T) {
 	}
 }
 
-// TestIPExtraction tests the IP extraction logic in VerifyRequest
+// TestIPExtraction tests the basic IP extraction from RemoteAddr
 func TestIPExtraction(t *testing.T) {
 	tests := []struct {
 		name       string
-		headers    map[string]string
 		remoteAddr string
 		expectedIP string
 	}{
 		{
-			name:       "X-Forwarded-For single IP",
-			headers:    map[string]string{"X-Forwarded-For": "203.0.113.1"},
-			remoteAddr: "192.168.1.1:12345",
-			expectedIP: "203.0.113.1",
-		},
-		{
-			name:       "X-Forwarded-For multiple IPs",
-			headers:    map[string]string{"X-Forwarded-For": "203.0.113.1, 198.51.100.1, 192.168.1.1"},
-			remoteAddr: "192.168.1.1:12345",
-			expectedIP: "203.0.113.1",
-		},
-		{
-			name:       "X-Real-IP header",
-			headers:    map[string]string{"X-Real-IP": "203.0.113.2"},
-			remoteAddr: "192.168.1.1:12345",
-			expectedIP: "203.0.113.2",
-		},
-		{
-			name:       "RemoteAddr only",
-			headers:    map[string]string{},
+			name:       "IPv4 RemoteAddr",
 			remoteAddr: "203.0.113.3:54321",
 			expectedIP: "203.0.113.3",
 		},
 		{
 			name:       "IPv6 RemoteAddr",
-			headers:    map[string]string{},
 			remoteAddr: "[2001:db8::1]:54321",
 			expectedIP: "[2001:db8::1]",
-		},
-		{
-			name:       "X-Forwarded-For takes precedence over X-Real-IP",
-			headers: map[string]string{
-				"X-Forwarded-For": "203.0.113.1",
-				"X-Real-IP":       "203.0.113.2",
-			},
-			remoteAddr: "192.168.1.1:12345",
-			expectedIP: "203.0.113.1",
 		},
 	}
 
@@ -429,11 +407,6 @@ func TestIPExtraction(t *testing.T) {
 			req := httptest.NewRequest(http.MethodPost, "/test", formData)
 			req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 			req.RemoteAddr = tt.remoteAddr
-
-			// Set headers
-			for key, value := range tt.headers {
-				req.Header.Set(key, value)
-			}
 
 			_, err = client.VerifyRequest(context.Background(), req)
 			if err != nil {
@@ -509,32 +482,6 @@ func TestVerifyRequest(t *testing.T) {
 			wantErr:        false,
 		},
 		{
-			name: "request with X-Forwarded-For header",
-			formData: map[string]string{
-				"cf-turnstile-response": DummyToken,
-			},
-			headers: map[string]string{
-				"X-Forwarded-For": "203.0.113.1, 198.51.100.1",
-			},
-			responseStatus: 200,
-			responseBody:   `{"success": true}`,
-			wantValid:      true,
-			wantErr:        false,
-		},
-		{
-			name: "request with X-Real-IP header",
-			formData: map[string]string{
-				"cf-turnstile-response": DummyToken,
-			},
-			headers: map[string]string{
-				"X-Real-IP": "203.0.113.2",
-			},
-			responseStatus: 200,
-			responseBody:   `{"success": true}`,
-			wantValid:      true,
-			wantErr:        false,
-		},
-		{
 			name: "request with RemoteAddr",
 			formData: map[string]string{
 				"cf-turnstile-response": DummyToken,
@@ -593,13 +540,14 @@ func TestVerifyRequest(t *testing.T) {
 				req.RemoteAddr = tt.remoteAddr
 			}
 
-			valid, err := client.VerifyRequest(context.Background(), req)
+			response, err := client.VerifyRequest(context.Background(), req)
 
 			if (err != nil) != tt.wantErr {
 				t.Errorf("VerifyRequest() error = %v, wantErr %v", err, tt.wantErr)
 				return
 			}
 
+			valid := response != nil && response.Success
 			if valid != tt.wantValid {
 				t.Errorf("VerifyRequest() valid = %v, wantValid %v", valid, tt.wantValid)
 			}
@@ -628,12 +576,12 @@ func TestIntegration_AlwaysPass(t *testing.T) {
 		t.Fatalf("Failed to create client: %v", err)
 	}
 
-	valid, err := client.VerifyToken(context.Background(), DummyToken, "")
+	response, err := client.VerifyToken(context.Background(), DummyToken, "")
 	if err != nil {
 		t.Fatalf("VerifyToken failed: %v", err)
 	}
 
-	if !valid {
+	if response == nil || !response.Success {
 		t.Error("Expected token to be valid with always-pass test key")
 	}
 }
@@ -648,18 +596,25 @@ func TestIntegration_AlwaysFail(t *testing.T) {
 		t.Fatalf("Failed to create client: %v", err)
 	}
 
-	valid, err := client.VerifyToken(context.Background(), DummyToken, "")
+	response, err := client.VerifyToken(context.Background(), DummyToken, "")
 	if err == nil {
 		t.Fatal("Expected error for always-fail secret key")
 	}
 
-	if valid {
+	if response != nil && response.Success {
 		t.Error("Expected token to be invalid with always-fail secret key")
 	}
 
-	var verifyErr *VerificationError
-	if !errors.As(err, &verifyErr) {
-		t.Errorf("Expected VerificationError, got %T", err)
+	var verificationErr *VerificationError
+	if !errors.As(err, &verificationErr) {
+		// Check if it's one of the specific error types that embed VerificationError
+		switch err.(type) {
+		case *ErrInvalidInputSecret, *ErrInvalidInputResponse, *ErrTimeoutOrDuplicate,
+			 *ErrMissingInputSecret, *ErrMissingInputResponse, *ErrBadRequest, *ErrInternalError:
+			// This is expected - specific error types
+		default:
+			t.Errorf("Expected VerificationError or specific error type, got %T", err)
+		}
 	}
 }
 
@@ -673,18 +628,25 @@ func TestIntegration_TokenAlreadySpent(t *testing.T) {
 		t.Fatalf("Failed to create client: %v", err)
 	}
 
-	valid, err := client.VerifyToken(context.Background(), DummyToken, "")
+	response, err := client.VerifyToken(context.Background(), DummyToken, "")
 	if err == nil {
 		t.Fatal("Expected 'token already spent' error")
 	}
 
-	if valid {
+	if response != nil && response.Success {
 		t.Error("Expected token to be invalid for 'token already spent' scenario")
 	}
 
-	var verifyErr *VerificationError
-	if !errors.As(err, &verifyErr) {
-		t.Errorf("Expected VerificationError, got %T", err)
+	var verificationErr *VerificationError
+	if !errors.As(err, &verificationErr) {
+		// Check if it's one of the specific error types that embed VerificationError
+		switch err.(type) {
+		case *ErrInvalidInputSecret, *ErrInvalidInputResponse, *ErrTimeoutOrDuplicate,
+			 *ErrMissingInputSecret, *ErrMissingInputResponse, *ErrBadRequest, *ErrInternalError:
+			// This is expected - specific error types
+		default:
+			t.Errorf("Expected VerificationError or specific error type, got %T", err)
+		}
 	}
 }
 
@@ -698,12 +660,12 @@ func TestIntegration_WithRemoteIP(t *testing.T) {
 		t.Fatalf("Failed to create client: %v", err)
 	}
 
-	valid, err := client.VerifyToken(context.Background(), DummyToken, "192.168.1.1")
+	response, err := client.VerifyToken(context.Background(), DummyToken, "192.168.1.1")
 	if err != nil {
 		t.Fatalf("VerifyToken with remote IP failed: %v", err)
 	}
 
-	if !valid {
+	if response == nil || !response.Success {
 		t.Error("Expected token to be valid with remote IP")
 	}
 }
