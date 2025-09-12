@@ -92,14 +92,15 @@ func TestClientOptions(t *testing.T) {
 
 	t.Run("WithTimeout", func(t *testing.T) {
 		customTimeout := 15 * time.Second
+		customClient := &http.Client{Timeout: customTimeout}
 		client, err := New(DummySiteKeyAlwaysPass, DummySecretKeyAlwaysPass,
-			WithTimeout(customTimeout),
+			WithHTTPClient(customClient),
 		)
 		if err != nil {
 			t.Fatalf("New() failed: %v", err)
 		}
 		if client.client.Timeout != customTimeout {
-			t.Errorf("WithTimeout() got %v, want %v", client.client.Timeout, customTimeout)
+			t.Errorf("WithHTTPClient() timeout got %v, want %v", client.client.Timeout, customTimeout)
 		}
 	})
 
@@ -117,13 +118,12 @@ func TestClientOptions(t *testing.T) {
 	})
 
 	t.Run("multiple options", func(t *testing.T) {
-		customClient := &http.Client{Timeout: 5 * time.Second}
 		customTimeout := 15 * time.Second
+		customClient := &http.Client{Timeout: customTimeout}
 		customEndpoint := "https://custom.example.com/verify"
 
 		client, err := New(DummySiteKeyAlwaysPass, DummySecretKeyAlwaysPass,
 			WithHTTPClient(customClient),
-			WithTimeout(customTimeout),
 			WithVerifyEndpoint(customEndpoint),
 		)
 		if err != nil {
@@ -134,7 +134,7 @@ func TestClientOptions(t *testing.T) {
 			t.Error("WithHTTPClient() did not set custom HTTP client")
 		}
 		if client.client.Timeout != customTimeout {
-			t.Errorf("WithTimeout() got %v, want %v", client.client.Timeout, customTimeout)
+			t.Errorf("WithHTTPClient() timeout got %v, want %v", client.client.Timeout, customTimeout)
 		}
 		if client.verifyURL != customEndpoint {
 			t.Errorf("WithVerifyEndpoint() got %s, want %s", client.verifyURL, customEndpoint)
