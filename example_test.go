@@ -4,20 +4,21 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/tordrt/go-turnstile"
 	"log"
+
+	"github.com/tordrt/go-turnstile"
 )
 
 // ExampleNew demonstrates basic usage of the Turnstile client
 func ExampleNew() {
-	client, err := turnstile.New("your-site-key", "your-secret-key")
+	turnstileClient, err := turnstile.New("your-site-key", "your-secret-key")
 	if err != nil {
 		log.Fatal(err)
 	}
 
 	// Verify a token from a form submission (no IP)
 	// Using _ to ignore response since validation is confirmed by nil error
-	_, err = client.VerifyToken(context.Background(), "token-from-form")
+	_, err = turnstileClient.VerifyToken(context.TODO(), "token-from-form")
 	if err != nil {
 		log.Printf("Verification failed: %v", err)
 		return
@@ -30,7 +31,7 @@ func ExampleNew() {
 
 // ExampleNew_withOptions demonstrates using client options
 func ExampleNew_withOptions() {
-	client, err := turnstile.New("your-site-key", "your-secret-key",
+	turnstileClient, err := turnstile.New("your-site-key", "your-secret-key",
 		turnstile.WithVerifyEndpoint("https://custom.example.com/verify"),
 	)
 	if err != nil {
@@ -39,7 +40,7 @@ func ExampleNew_withOptions() {
 
 	// Verify with remote IP
 	// Using _ to ignore response since validation is confirmed by nil error
-	_, err = client.VerifyToken(context.Background(), "token-from-form", "192.168.1.1")
+	_, err = turnstileClient.VerifyToken(context.TODO(), "token-from-form", "192.168.1.1")
 	if err != nil {
 		log.Printf("Verification failed: %v", err)
 		return
@@ -52,7 +53,7 @@ func ExampleNew_withOptions() {
 
 // ExampleClient_VerifyToken demonstrates token verification with error handling
 func ExampleClient_VerifyToken() {
-	client, err := turnstile.New("your-site-key", "your-secret-key")
+	turnstileClient, err := turnstile.New("your-site-key", "your-secret-key")
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -60,7 +61,7 @@ func ExampleClient_VerifyToken() {
 	token := "cf-turnstile-response-token"
 
 	// Using _ to ignore response since validation is confirmed by nil error
-	_, err = client.VerifyToken(context.Background(), token)
+	_, err = turnstileClient.VerifyToken(context.TODO(), token)
 	if err != nil {
 		// Handle specific error types
 		switch {

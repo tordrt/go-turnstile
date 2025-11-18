@@ -26,7 +26,6 @@ go get github.com/tordrt/go-turnstile
 package main
 
 import (
-    "context"
     "fmt"
     "log"
     "net/http"
@@ -36,14 +35,14 @@ import (
 
 func main() {
     // Create a new Turnstile client
-    client, err := turnstile.New("your-site-key", "your-secret-key")
+	turnstileClient, err := turnstile.New("your-site-key", "your-secret-key")
     if err != nil {
         log.Fatal(err)
     }
 
     http.HandleFunc("/verify", func(w http.ResponseWriter, r *http.Request) {
         // Verify the token from the HTTP request
-        response, err := client.VerifyRequest(context.Background(), r)
+        response, err := turnstileClient.VerifyRequest(r.Context(), r)
         if err != nil {
             http.Error(w, "CAPTCHA verification failed", http.StatusBadRequest)
             return
@@ -62,23 +61,13 @@ func main() {
 ### Basic Token Verification
 
 ```go
-client, err := turnstile.New("your-site-key", "your-secret-key")
-if err != nil {
-    // Handle client creation error
-    return
-}
-
 // Verify a token directly
-response, err := client.VerifyToken(context.Background(), "user-token", "192.168.1.1")
+response, err := turnstileClient.VerifyToken(context.TODO(), clientToken, clientIP)
 if err != nil {
     // Handle verification error
     return
 }
-
-// Access response fields
-fmt.Printf("Challenge completed at: %s\n", response.ChallengeTS)
-fmt.Printf("Hostname: %s\n", response.Hostname)
-fmt.Printf("Action: %s\n", response.Action)
+// Verification successful
 ```
 
 ### HTTP Request Verification
@@ -86,23 +75,21 @@ fmt.Printf("Action: %s\n", response.Action)
 The `VerifyRequest` method automatically extracts the token from the `cf-turnstile-response` form field and determines the client IP:
 
 ```go
-func handleForm(w http.ResponseWriter, r *http.Request) {
-    response, err := client.VerifyRequest(context.Background(), r)
+func handlerFunction(w http.ResponseWriter, r *http.Request) {
+    response, err := turnstileClient.VerifyRequest(r.Context(), r)
     if err != nil {
         // Handle verification failure
-        http.Error(w, "CAPTCHA verification failed", http.StatusBadRequest)
         return
     }
     
-    // Verification successful - proceed with form processing
-    processForm(r)
+    // Verification successful
 }
 ```
 
 ### Advanced Configuration
 
 ```go
-client, err := turnstile.New(
+turnstileClient, err := turnstile.New(
     "your-site-key",
     "your-secret-key",
     turnstile.WithMaxRetries(3),
@@ -121,21 +108,21 @@ client, err := turnstile.New(
 The library provides specific error types for different failure scenarios:
 
 ```go
-response, err := client.VerifyToken(context.Background(), token, clientIP)
+response, err := turnstileClient.VerifyToken(r.Context(), token, clientIP)
 if err != nil {
     // Check for specific error types
-    var timeoutErr *turnstile.ErrTimeoutOrDuplicate
+    var timeoutErr turnstile.ErrTimeoutOrDuplicate
     if errors.As(err, &timeoutErr) {
         log.Println("Token timeout or duplicate submission:", err)
         return
     }
-    
-    var invalidTokenErr *turnstile.ErrInvalidInputResponse
+
+    var invalidTokenErr turnstile.ErrInvalidInputResponse
     if errors.As(err, &invalidTokenErr) {
         log.Println("Invalid token provided:", err)
         return
     }
-    
+
     // Handle other verification errors
     log.Println("Verification failed:", err)
     return
@@ -230,7 +217,7 @@ func TestTurnstileVerification(t *testing.T) {
     client, err := turnstile.New("test-site-key", "test-secret-key")
     assert.NoError(t, err)
     
-    response, err := client.VerifyToken(context.Background(), "dummy-token", "127.0.0.1")
+    response, err := client.VerifyToken(context.TODO(), "dummy-token", "127.0.0.1")
     // Result depends on which test keys you use
 }
 ```

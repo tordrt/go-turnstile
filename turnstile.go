@@ -14,7 +14,7 @@
 //	response, err := client.VerifyRequest(context.Background(), httpRequest)
 //	if err != nil {
 //		// Handle verification error (specific error types available)
-//		var timeoutErr *turnstile.ErrTimeoutOrDuplicate
+//		var timeoutErr turnstile.ErrTimeoutOrDuplicate
 //		if errors.As(err, &timeoutErr) {
 //			// Handle timeout/duplicate specifically
 //		}
