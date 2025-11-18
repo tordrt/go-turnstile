@@ -1,5 +1,10 @@
 # go-turnstile
 
+[![Go Version](https://img.shields.io/github/go-mod/go-version/tordrt/go-turnstile)](go.mod)
+[![Go Reference](https://pkg.go.dev/badge/github.com/tordrt/go-turnstile.svg)](https://pkg.go.dev/github.com/tordrt/go-turnstile)
+[![Go Report Card](https://goreportcard.com/badge/github.com/tordrt/go-turnstile)](https://goreportcard.com/report/github.com/tordrt/go-turnstile)
+[![License](https://img.shields.io/github/license/tordrt/go-turnstile)](LICENSE)
+
 A simple, thread-safe Go client library for verifying Cloudflare Turnstile CAPTCHA tokens.
 
 Cloudflare Turnstile is an alternative to traditional CAPTCHAs that helps websites protect against bots and automated traffic while providing a better user experience. This library provides a clean, idiomatic Go interface for server-side token verification.
