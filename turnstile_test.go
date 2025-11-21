@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 	"time"
@@ -742,6 +743,137 @@ func TestNewTestRequest(t *testing.T) {
 
 		if response == nil || !response.Success {
 			t.Error("Expected successful verification")
+		}
+	})
+}
+
+func TestAddTestToken(t *testing.T) {
+	t.Run("add token to empty request", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(""))
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+
+		err := AddTestToken(req)
+		if err != nil {
+			t.Fatalf("AddTestToken failed: %v", err)
+		}
+
+		token := req.FormValue("cf-turnstile-response")
+		if token != TestToken {
+			t.Errorf("Expected token %s, got %s", TestToken, token)
+		}
+	})
+
+	t.Run("add token to request with existing form data", func(t *testing.T) {
+		formData := "username=testuser&email=test@example.com"
+		req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(formData))
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+
+		err := AddTestToken(req)
+		if err != nil {
+			t.Fatalf("AddTestToken failed: %v", err)
+		}
+
+		// Check the token was added
+		token := req.FormValue("cf-turnstile-response")
+		if token != TestToken {
+			t.Errorf("Expected token %s, got %s", TestToken, token)
+		}
+
+		// Check existing form data is preserved
+		if req.FormValue("username") != "testuser" {
+			t.Errorf("Expected username 'testuser', got %s", req.FormValue("username"))
+		}
+
+		if req.FormValue("email") != "test@example.com" {
+			t.Errorf("Expected email 'test@example.com', got %s", req.FormValue("email"))
+		}
+	})
+
+	t.Run("add token using url.Values", func(t *testing.T) {
+		form := url.Values{}
+		form.Set("username", "testuser")
+		form.Set("password", "secret123")
+
+		req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(form.Encode()))
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+
+		err := AddTestToken(req)
+		if err != nil {
+			t.Fatalf("AddTestToken failed: %v", err)
+		}
+
+		// Check the token was added
+		if req.FormValue("cf-turnstile-response") != TestToken {
+			t.Errorf("Expected token %s, got %s", TestToken, req.FormValue("cf-turnstile-response"))
+		}
+
+		// Check existing fields are preserved
+		if req.FormValue("username") != "testuser" {
+			t.Error("Existing form field 'username' was not preserved")
+		}
+		if req.FormValue("password") != "secret123" {
+			t.Error("Existing form field 'password' was not preserved")
+		}
+	})
+
+	t.Run("use with VerifyRequest", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(200)
+			if _, err := w.Write([]byte(`{"success": true}`)); err != nil {
+				t.Errorf("Failed to write response: %v", err)
+			}
+		}))
+		defer server.Close()
+
+		client, err := New(TestSiteKeyAlwaysPass, TestSecretKeyAlwaysPass,
+			WithVerifyEndpoint(server.URL),
+		)
+		if err != nil {
+			t.Fatalf("Failed to create client: %v", err)
+		}
+
+		// Create a request with existing form data
+		form := url.Values{}
+		form.Set("username", "testuser")
+		req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(form.Encode()))
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		req.RemoteAddr = "192.0.2.1:54321"
+
+		// Add the test token
+		err = AddTestToken(req)
+		if err != nil {
+			t.Fatalf("AddTestToken failed: %v", err)
+		}
+
+		// Verify the request
+		response, err := client.VerifyRequest(context.Background(), req)
+		if err != nil {
+			t.Fatalf("VerifyRequest failed: %v", err)
+		}
+
+		if response == nil || !response.Success {
+			t.Error("Expected successful verification")
+		}
+	})
+
+	t.Run("overwrites existing token", func(t *testing.T) {
+		formData := "cf-turnstile-response=old-token&username=test"
+		req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(formData))
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+
+		err := AddTestToken(req)
+		if err != nil {
+			t.Fatalf("AddTestToken failed: %v", err)
+		}
+
+		token := req.FormValue("cf-turnstile-response")
+		if token != TestToken {
+			t.Errorf("Expected token to be overwritten to %s, got %s", TestToken, token)
+		}
+
+		// Other fields should be preserved
+		if req.FormValue("username") != "test" {
+			t.Error("Existing form field 'username' was not preserved")
 		}
 	})
 }

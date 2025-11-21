@@ -303,7 +303,11 @@ func TestHandlerDuplicateToken(t *testing.T) {
 
 ### Testing HTTP Handlers with VerifyRequest()
 
-For handlers that use `VerifyRequest()`, the library provides `NewTestRequest()` which creates a complete HTTP request with the test token already included:
+The library provides two ways to add the test token to HTTP requests:
+
+#### 1. NewTestRequest() - Create a New Request
+
+Creates a complete HTTP request with the test token already included:
 
 ```go
 func TestHTTPHandler(t *testing.T) {
@@ -330,6 +334,36 @@ You can also create a request without additional form data:
 
 ```go
 req := turnstile.NewTestRequest()  // Just includes the Turnstile token
+```
+
+#### 2. AddTestToken() - Add to Existing Request
+
+If you already have a request object, use `AddTestToken()` to add the token:
+
+```go
+func TestHTTPHandler(t *testing.T) {
+    client := turnstile.NewTestClient()
+
+    // You already have a request from your test setup
+    form := url.Values{}
+    form.Set("username", "testuser")
+    req := httptest.NewRequest(http.MethodPost, "/submit", strings.NewReader(form.Encode()))
+    req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+
+    // Add the test token to the existing request
+    err := turnstile.AddTestToken(req)
+    if err != nil {
+        t.Fatalf("Failed to add test token: %v", err)
+    }
+
+    // Verify the request
+    response, err := client.VerifyRequest(context.Background(), req)
+    if err != nil {
+        t.Fatalf("Expected successful verification: %v", err)
+    }
+
+    // Test your handler logic...
+}
 ```
 
 ### Test Constants

@@ -5,6 +5,10 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"net/http"
+	"net/http/httptest"
+	"net/url"
+	"strings"
 
 	"github.com/tordrt/go-turnstile"
 )
@@ -161,6 +165,41 @@ func ExampleNewTestRequest() {
 	})
 
 	// Verify the request - the test token is already in the request
+	response, err := testClient.VerifyRequest(context.Background(), req)
+	if err != nil {
+		log.Printf("Verification error: %v", err)
+		return
+	}
+
+	fmt.Printf("Verification successful: %v\n", response.Success)
+}
+
+// This example demonstrates how to use AddTestToken to add the Turnstile
+// test token to an existing HTTP request. This is useful when you already
+// have a request object from your test setup.
+//
+// Note: This example uses test keys that interact with Cloudflare's real endpoint,
+// so it's shown for demonstration purposes only.
+func ExampleAddTestToken() {
+	// Create a test client
+	testClient := turnstile.NewTestClient()
+
+	// Suppose you already have a request from your test framework
+	form := url.Values{}
+	form.Set("username", "testuser")
+	form.Set("email", "test@example.com")
+
+	req := httptest.NewRequest(http.MethodPost, "/submit", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+
+	// Add the test token to the existing request
+	err := turnstile.AddTestToken(req)
+	if err != nil {
+		log.Printf("Failed to add test token: %v", err)
+		return
+	}
+
+	// Now verify the request
 	response, err := testClient.VerifyRequest(context.Background(), req)
 	if err != nil {
 		log.Printf("Verification error: %v", err)

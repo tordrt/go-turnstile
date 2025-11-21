@@ -148,3 +148,40 @@ func NewTestRequest(formData ...map[string]string) *http.Request {
 
 	return req
 }
+
+// AddTestToken adds the Turnstile test token to an existing HTTP request.
+// This is useful when you already have a request object and just want to add the token.
+//
+// The function automatically handles both GET and POST requests:
+//   - For POST requests with form data, it adds the token to the form
+//   - The request's form must be parseable (ParseForm must succeed)
+//
+// Example with httptest:
+//
+//	req := httptest.NewRequest(http.MethodPost, "/submit", strings.NewReader("username=test"))
+//	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+//	turnstile.AddTestToken(req)
+//
+//	// Now req contains both username=test and cf-turnstile-response=XXXX.DUMMY.TOKEN.XXXX
+//
+// Example with existing form data:
+//
+//	form := url.Values{}
+//	form.Set("username", "testuser")
+//	req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(form.Encode()))
+//	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+//	turnstile.AddTestToken(req)
+//
+//	// Now req includes the test token in addition to existing form data
+func AddTestToken(req *http.Request) error {
+	// Parse the existing form data
+	if err := req.ParseForm(); err != nil {
+		return err
+	}
+
+	// Add the test token to the form
+	req.Form.Set("cf-turnstile-response", TestToken)
+	req.PostForm.Set("cf-turnstile-response", TestToken)
+
+	return nil
+}
