@@ -428,6 +428,108 @@ func TestTurnstileHandler(t *testing.T) {
 
 For more examples, see the [example_test.go](example_test.go) file.
 
+### Mock Client - Unit Testing Without HTTP Requests
+
+The test clients above (`NewTestClient`, etc.) use Cloudflare's test keys but still make real HTTP requests to Cloudflare's servers. For true unit testing with **zero network calls**, use the mock client:
+
+```go
+func TestMyHandler(t *testing.T) {
+    // Create a mock client - NO HTTP requests are made
+    client, mock := turnstile.NewMockClient()
+
+    // Any token works - responses are fully mocked
+    response, err := client.VerifyToken(context.Background(), "any-token")
+    if err != nil {
+        t.Fatalf("Unexpected error: %v", err)
+    }
+
+    // Verify the mock was called
+    if mock.CallCount() != 1 {
+        t.Errorf("Expected 1 call, got %d", mock.CallCount())
+    }
+
+    // Inspect the request that was made
+    body := mock.LastRequestBody()
+    // ... assertions on the request
+}
+```
+
+#### Mock Client Types
+
+| Function | Description |
+|----------|-------------|
+| `NewMockClient()` | Returns successful verification |
+| `NewMockClientAlwaysFail()` | Returns `ErrInvalidInputResponse` |
+| `NewMockClientTokenSpent()` | Returns `ErrTimeoutOrDuplicate` |
+| `NewMockClientWithResponse(resp)` | Returns custom `MockResponse` |
+| `NewMockClientWithHTTPError(code, status)` | Simulates HTTP errors (500, 429, etc.) |
+
+#### Custom Mock Responses
+
+```go
+func TestCustomScenario(t *testing.T) {
+    client, _ := turnstile.NewMockClientWithResponse(turnstile.MockResponse{
+        Success:     true,
+        ChallengeTS: "2024-01-01T00:00:00Z",
+        Hostname:    "myapp.example.com",
+        Action:      "login",
+    })
+
+    response, _ := client.VerifyToken(context.Background(), "token")
+    if response.Action != "login" {
+        t.Errorf("Expected action 'login', got %q", response.Action)
+    }
+}
+```
+
+#### Changing Mock Behavior Dynamically
+
+```go
+func TestDynamicBehavior(t *testing.T) {
+    client, mock := turnstile.NewMockClient()
+
+    // First call succeeds
+    _, err := client.VerifyToken(context.Background(), "token")
+    if err != nil {
+        t.Fatal("Expected success")
+    }
+
+    // Change to failure mode
+    mock.SetResponse(turnstile.MockResponse{
+        Success:    false,
+        ErrorCodes: []string{"timeout-or-duplicate"},
+    })
+
+    // Second call fails
+    _, err = client.VerifyToken(context.Background(), "token")
+    if err == nil {
+        t.Fatal("Expected failure")
+    }
+}
+```
+
+#### Testing HTTP Errors
+
+```go
+func TestServerError(t *testing.T) {
+    client, _ := turnstile.NewMockClientWithHTTPError(500, "500 Internal Server Error")
+
+    _, err := client.VerifyToken(context.Background(), "token")
+    if err == nil {
+        t.Fatal("Expected error for 500 response")
+    }
+}
+```
+
+#### When to Use Mock vs Test Clients
+
+| Scenario | Recommended Client |
+|----------|-------------------|
+| Unit tests (fast, isolated, no network) | `NewMockClient()` |
+| Integration tests (real Cloudflare validation) | `NewTestClient()` |
+| CI/CD pipelines with network restrictions | `NewMockClient()` |
+| Testing with real Cloudflare error responses | `NewTestClient()` |
+
 ## Contributing
 
 Contributions are welcome! Please feel free to submit a Pull Request.
