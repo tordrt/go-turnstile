@@ -5,6 +5,10 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"net/http"
+	"net/http/httptest"
+	"net/url"
+	"strings"
 
 	"github.com/tordrt/go-turnstile"
 )
@@ -86,4 +90,121 @@ func ExampleClient_VerifyToken() {
 	// If no error, token is valid
 	fmt.Println("CAPTCHA verification successful")
 	// Proceed with form processing
+}
+
+// This example demonstrates how to use the test client for unit testing.
+// This is the recommended approach for testing your Turnstile handler code.
+//
+// Note: This example uses test keys that interact with Cloudflare's real endpoint,
+// so it's shown for demonstration purposes only.
+func ExampleNewTestClient() {
+	// Create a test client that always passes verification
+	testClient := turnstile.NewTestClient()
+
+	// Use the test token provided by Cloudflare
+	// In your real tests, you would use this in your handler test code
+	response, err := testClient.VerifyToken(context.Background(), turnstile.TestToken)
+	if err != nil {
+		// In real usage, handle errors appropriately
+		log.Printf("Verification error: %v", err)
+		return
+	}
+
+	fmt.Printf("Test verification successful: %v\n", response.Success)
+}
+
+// This example demonstrates testing error handling when Turnstile verification fails.
+//
+// Note: This example uses test keys that interact with Cloudflare's real endpoint,
+// so it's shown for demonstration purposes only.
+func ExampleNewTestClientAlwaysFail() {
+	// Create a test client that always fails verification
+	testClient := turnstile.NewTestClientAlwaysFail()
+
+	// This will fail even with the test token
+	_, err := testClient.VerifyToken(context.Background(), turnstile.TestToken)
+	if err != nil {
+		fmt.Println("Verification failed as expected")
+		// Test your error handling code here
+	}
+}
+
+// This example demonstrates testing duplicate token handling.
+//
+// Note: This example uses test keys that interact with Cloudflare's real endpoint,
+// so it's shown for demonstration purposes only.
+func ExampleNewTestClientTokenSpent() {
+	// Create a test client that simulates "token already spent" errors
+	testClient := turnstile.NewTestClientTokenSpent()
+
+	_, err := testClient.VerifyToken(context.Background(), turnstile.TestToken)
+	if err != nil {
+		var timeoutErr turnstile.ErrTimeoutOrDuplicate
+		if errors.As(err, &timeoutErr) {
+			fmt.Println("Detected duplicate token submission")
+			// Test your duplicate submission handling here
+		}
+	}
+}
+
+// This example demonstrates how to use NewTestRequest to test HTTP handlers
+// that use VerifyRequest(). This is the easiest way to test handlers that
+// process form submissions with Turnstile tokens.
+//
+// Note: This example uses test keys that interact with Cloudflare's real endpoint,
+// so it's shown for demonstration purposes only.
+func ExampleNewTestRequest() {
+	// Create a test client
+	testClient := turnstile.NewTestClient()
+
+	// Create a test request with the Turnstile token already included
+	// You can also add additional form fields
+	req := turnstile.NewTestRequest(map[string]string{
+		"username": "testuser",
+		"email":    "test@example.com",
+	})
+
+	// Verify the request - the test token is already in the request
+	response, err := testClient.VerifyRequest(context.Background(), req)
+	if err != nil {
+		log.Printf("Verification error: %v", err)
+		return
+	}
+
+	fmt.Printf("Verification successful: %v\n", response.Success)
+}
+
+// This example demonstrates how to use AddTestToken to add the Turnstile
+// test token to an existing HTTP request. This is useful when you already
+// have a request object from your test setup.
+//
+// Note: This example uses test keys that interact with Cloudflare's real endpoint,
+// so it's shown for demonstration purposes only.
+func ExampleAddTestToken() {
+	// Create a test client
+	testClient := turnstile.NewTestClient()
+
+	// Suppose you already have a request from your test framework
+	form := url.Values{}
+	form.Set("username", "testuser")
+	form.Set("email", "test@example.com")
+
+	req := httptest.NewRequest(http.MethodPost, "/submit", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+
+	// Add the test token to the existing request
+	err := turnstile.AddTestToken(req)
+	if err != nil {
+		log.Printf("Failed to add test token: %v", err)
+		return
+	}
+
+	// Now verify the request
+	response, err := testClient.VerifyRequest(context.Background(), req)
+	if err != nil {
+		log.Printf("Verification error: %v", err)
+		return
+	}
+
+	fmt.Printf("Verification successful: %v\n", response.Success)
 }

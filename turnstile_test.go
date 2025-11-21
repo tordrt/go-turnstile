@@ -5,29 +5,14 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 	"time"
 )
 
-// Cloudflare dummy keys for testing
-// See: https://developers.cloudflare.com/turnstile/reference/testing/
-const (
-	// Dummy sitekeys
-	DummySiteKeyAlwaysPass     = "1x00000000000000000000AA" // Always passes (visible)
-	DummySiteKeyAlwaysBlock    = "2x00000000000000000000AB" // Always blocks (visible)
-	DummySiteKeyAlwaysPassInv  = "1x00000000000000000000BB" // Always passes (invisible)
-	DummySiteKeyAlwaysBlockInv = "2x00000000000000000000BB" // Always blocks (invisible)
-	DummySiteKeyForceChallenge = "3x00000000000000000000FF" // Forces interactive challenge
-
-	// Dummy secret keys
-	DummySecretKeyAlwaysPass = "1x0000000000000000000000000000000AA" // Always passes
-	DummySecretKeyAlwaysFail = "2x0000000000000000000000000000000AA" // Always fails
-	DummySecretKeyTokenSpent = "3x0000000000000000000000000000000AA" // "token already spent" error
-
-	// Dummy response token - only accepted by dummy secret keys
-	DummyToken = "XXXX.DUMMY.TOKEN.XXXX"
-)
+// Test constants are now exported in testing.go for public use
+// This file uses those exported constants for internal testing
 
 func TestNew(t *testing.T) {
 	tests := []struct {
@@ -38,19 +23,19 @@ func TestNew(t *testing.T) {
 	}{
 		{
 			name:      "valid keys with dummy always-pass",
-			siteKey:   DummySiteKeyAlwaysPass,
-			secretKey: DummySecretKeyAlwaysPass,
+			siteKey:   TestSiteKeyAlwaysPass,
+			secretKey: TestSecretKeyAlwaysPass,
 			wantErr:   false,
 		},
 		{
 			name:      "empty site key",
 			siteKey:   "",
-			secretKey: DummySecretKeyAlwaysPass,
+			secretKey: TestSecretKeyAlwaysPass,
 			wantErr:   true,
 		},
 		{
 			name:      "empty secret key",
-			siteKey:   DummySiteKeyAlwaysPass,
+			siteKey:   TestSiteKeyAlwaysPass,
 			secretKey: "",
 			wantErr:   true,
 		},
@@ -79,7 +64,7 @@ func TestNew(t *testing.T) {
 func TestClientOptions(t *testing.T) {
 	t.Run("WithHTTPClient", func(t *testing.T) {
 		customClient := &http.Client{Timeout: 5 * time.Second}
-		client, err := New(DummySiteKeyAlwaysPass, DummySecretKeyAlwaysPass,
+		client, err := New(TestSiteKeyAlwaysPass, TestSecretKeyAlwaysPass,
 			WithHTTPClient(customClient),
 		)
 		if err != nil {
@@ -93,7 +78,7 @@ func TestClientOptions(t *testing.T) {
 	t.Run("WithTimeout", func(t *testing.T) {
 		customTimeout := 15 * time.Second
 		customClient := &http.Client{Timeout: customTimeout}
-		client, err := New(DummySiteKeyAlwaysPass, DummySecretKeyAlwaysPass,
+		client, err := New(TestSiteKeyAlwaysPass, TestSecretKeyAlwaysPass,
 			WithHTTPClient(customClient),
 		)
 		if err != nil {
@@ -106,7 +91,7 @@ func TestClientOptions(t *testing.T) {
 
 	t.Run("WithVerifyEndpoint", func(t *testing.T) {
 		customEndpoint := "https://custom.example.com/verify"
-		client, err := New(DummySiteKeyAlwaysPass, DummySecretKeyAlwaysPass,
+		client, err := New(TestSiteKeyAlwaysPass, TestSecretKeyAlwaysPass,
 			WithVerifyEndpoint(customEndpoint),
 		)
 		if err != nil {
@@ -122,7 +107,7 @@ func TestClientOptions(t *testing.T) {
 		customClient := &http.Client{Timeout: customTimeout}
 		customEndpoint := "https://custom.example.com/verify"
 
-		client, err := New(DummySiteKeyAlwaysPass, DummySecretKeyAlwaysPass,
+		client, err := New(TestSiteKeyAlwaysPass, TestSecretKeyAlwaysPass,
 			WithHTTPClient(customClient),
 			WithVerifyEndpoint(customEndpoint),
 		)
@@ -154,7 +139,7 @@ func TestVerify(t *testing.T) {
 	}{
 		{
 			name:           "dummy valid token",
-			token:          DummyToken,
+			token:          TestToken,
 			responseStatus: 200,
 			responseBody:   `{"success": true}`,
 			wantValid:      true,
@@ -162,7 +147,7 @@ func TestVerify(t *testing.T) {
 		},
 		{
 			name:           "invalid token with always-fail dummy secret",
-			token:          DummyToken,
+			token:          TestToken,
 			responseStatus: 200,
 			responseBody:   `{"success": false, "error-codes": ["invalid-input-secret"]}`,
 			wantValid:      false,
@@ -178,7 +163,7 @@ func TestVerify(t *testing.T) {
 		},
 		{
 			name:           "dummy token with remote IP",
-			token:          DummyToken,
+			token:          TestToken,
 			remoteIP:       "192.168.1.1",
 			responseStatus: 200,
 			responseBody:   `{"success": true}`,
@@ -219,7 +204,7 @@ func TestVerify(t *testing.T) {
 			}))
 			defer server.Close()
 
-			client, err := New(DummySiteKeyAlwaysPass, DummySecretKeyAlwaysPass,
+			client, err := New(TestSiteKeyAlwaysPass, TestSecretKeyAlwaysPass,
 				WithVerifyEndpoint(server.URL),
 			)
 			if err != nil {
@@ -325,14 +310,14 @@ func TestHTTPErrors(t *testing.T) {
 			}))
 			defer server.Close()
 
-			client, err := New(DummySiteKeyAlwaysPass, DummySecretKeyAlwaysPass,
+			client, err := New(TestSiteKeyAlwaysPass, TestSecretKeyAlwaysPass,
 				WithVerifyEndpoint(server.URL),
 			)
 			if err != nil {
 				t.Fatalf("New() failed: %v", err)
 			}
 
-			_, err = client.VerifyToken(context.Background(), DummyToken, "192.168.1.1")
+			_, err = client.VerifyToken(context.Background(), TestToken, "192.168.1.1")
 
 			if (err != nil) != tt.wantErr {
 				t.Errorf("VerifyToken() error = %v, wantErr %v", err, tt.wantErr)
@@ -352,7 +337,7 @@ func TestContextCancellation(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client, err := New(DummySiteKeyAlwaysPass, DummySecretKeyAlwaysPass,
+	client, err := New(TestSiteKeyAlwaysPass, TestSecretKeyAlwaysPass,
 		WithVerifyEndpoint(server.URL),
 	)
 	if err != nil {
@@ -362,7 +347,7 @@ func TestContextCancellation(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
 	defer cancel()
 
-	_, err = client.VerifyToken(ctx, DummyToken, "192.168.1.1")
+	_, err = client.VerifyToken(ctx, TestToken, "192.168.1.1")
 	if err == nil {
 		t.Error("Expected context cancellation error, got nil")
 	}
@@ -403,7 +388,7 @@ func TestIPExtraction(t *testing.T) {
 			}))
 			defer server.Close()
 
-			client, err := New(DummySiteKeyAlwaysPass, DummySecretKeyAlwaysPass,
+			client, err := New(TestSiteKeyAlwaysPass, TestSecretKeyAlwaysPass,
 				WithVerifyEndpoint(server.URL),
 			)
 			if err != nil {
@@ -411,7 +396,7 @@ func TestIPExtraction(t *testing.T) {
 			}
 
 			// Create request with turnstile token
-			formData := strings.NewReader("cf-turnstile-response=" + DummyToken)
+			formData := strings.NewReader("cf-turnstile-response=" + TestToken)
 			req := httptest.NewRequest(http.MethodPost, "/test", formData)
 			req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 			req.RemoteAddr = tt.remoteAddr
@@ -442,7 +427,7 @@ func TestVerifyRequest(t *testing.T) {
 		{
 			name: "valid request with turnstile token",
 			formData: map[string]string{
-				"cf-turnstile-response": DummyToken,
+				"cf-turnstile-response": TestToken,
 			},
 			responseStatus: 200,
 			responseBody:   `{"success": true}`,
@@ -480,7 +465,7 @@ func TestVerifyRequest(t *testing.T) {
 		{
 			name: "request with multiple form fields",
 			formData: map[string]string{
-				"cf-turnstile-response": DummyToken,
+				"cf-turnstile-response": TestToken,
 				"username":              "test",
 				"email":                 "test@example.com",
 			},
@@ -492,7 +477,7 @@ func TestVerifyRequest(t *testing.T) {
 		{
 			name: "request with RemoteAddr",
 			formData: map[string]string{
-				"cf-turnstile-response": DummyToken,
+				"cf-turnstile-response": TestToken,
 			},
 			remoteAddr:     "203.0.113.3:54321",
 			responseStatus: 200,
@@ -520,7 +505,7 @@ func TestVerifyRequest(t *testing.T) {
 			}))
 			defer server.Close()
 
-			client, err := New(DummySiteKeyAlwaysPass, DummySecretKeyAlwaysPass,
+			client, err := New(TestSiteKeyAlwaysPass, TestSecretKeyAlwaysPass,
 				WithVerifyEndpoint(server.URL),
 			)
 			if err != nil {
@@ -581,12 +566,12 @@ func TestIntegration_AlwaysPass(t *testing.T) {
 		t.Skip("skipping integration test in short mode")
 	}
 
-	client, err := New(DummySiteKeyAlwaysPass, DummySecretKeyAlwaysPass)
+	client, err := New(TestSiteKeyAlwaysPass, TestSecretKeyAlwaysPass)
 	if err != nil {
 		t.Fatalf("Failed to create client: %v", err)
 	}
 
-	response, err := client.VerifyToken(context.Background(), DummyToken, "")
+	response, err := client.VerifyToken(context.Background(), TestToken, "")
 	if err != nil {
 		t.Fatalf("VerifyToken failed: %v", err)
 	}
@@ -601,12 +586,12 @@ func TestIntegration_AlwaysFail(t *testing.T) {
 		t.Skip("skipping integration test in short mode")
 	}
 
-	client, err := New(DummySiteKeyAlwaysBlock, DummySecretKeyAlwaysFail)
+	client, err := New(TestSiteKeyAlwaysBlock, TestSecretKeyAlwaysFail)
 	if err != nil {
 		t.Fatalf("Failed to create client: %v", err)
 	}
 
-	response, err := client.VerifyToken(context.Background(), DummyToken, "")
+	response, err := client.VerifyToken(context.Background(), TestToken, "")
 	if err == nil {
 		t.Fatal("Expected error for always-fail secret key")
 	}
@@ -633,12 +618,12 @@ func TestIntegration_TokenAlreadySpent(t *testing.T) {
 		t.Skip("skipping integration test in short mode")
 	}
 
-	client, err := New(DummySiteKeyAlwaysPass, DummySecretKeyTokenSpent)
+	client, err := New(TestSiteKeyAlwaysPass, TestSecretKeyTokenSpent)
 	if err != nil {
 		t.Fatalf("Failed to create client: %v", err)
 	}
 
-	response, err := client.VerifyToken(context.Background(), DummyToken, "")
+	response, err := client.VerifyToken(context.Background(), TestToken, "")
 	if err == nil {
 		t.Fatal("Expected 'token already spent' error")
 	}
@@ -665,12 +650,12 @@ func TestIntegration_WithRemoteIP(t *testing.T) {
 		t.Skip("skipping integration test in short mode")
 	}
 
-	client, err := New(DummySiteKeyAlwaysPass, DummySecretKeyAlwaysPass)
+	client, err := New(TestSiteKeyAlwaysPass, TestSecretKeyAlwaysPass)
 	if err != nil {
 		t.Fatalf("Failed to create client: %v", err)
 	}
 
-	response, err := client.VerifyToken(context.Background(), DummyToken, "192.168.1.1")
+	response, err := client.VerifyToken(context.Background(), TestToken, "192.168.1.1")
 	if err != nil {
 		t.Fatalf("VerifyToken with remote IP failed: %v", err)
 	}
@@ -678,4 +663,217 @@ func TestIntegration_WithRemoteIP(t *testing.T) {
 	if response == nil || !response.Success {
 		t.Error("Expected token to be valid with remote IP")
 	}
+}
+
+func TestNewTestRequest(t *testing.T) {
+	t.Run("without additional form data", func(t *testing.T) {
+		req := NewTestRequest()
+
+		// Check the token is set
+		if err := req.ParseForm(); err != nil {
+			t.Fatalf("Failed to parse form: %v", err)
+		}
+
+		token := req.FormValue("cf-turnstile-response")
+		if token != TestToken {
+			t.Errorf("Expected token %s, got %s", TestToken, token)
+		}
+
+		// Check headers
+		if req.Header.Get("Content-Type") != "application/x-www-form-urlencoded" {
+			t.Error("Expected Content-Type to be application/x-www-form-urlencoded")
+		}
+
+		// Check RemoteAddr is set
+		if req.RemoteAddr == "" {
+			t.Error("Expected RemoteAddr to be set")
+		}
+	})
+
+	t.Run("with additional form data", func(t *testing.T) {
+		req := NewTestRequest(map[string]string{
+			"username": "testuser",
+			"email":    "test@example.com",
+		})
+
+		if err := req.ParseForm(); err != nil {
+			t.Fatalf("Failed to parse form: %v", err)
+		}
+
+		// Check the token is set
+		token := req.FormValue("cf-turnstile-response")
+		if token != TestToken {
+			t.Errorf("Expected token %s, got %s", TestToken, token)
+		}
+
+		// Check additional form fields
+		if req.FormValue("username") != "testuser" {
+			t.Errorf("Expected username 'testuser', got %s", req.FormValue("username"))
+		}
+
+		if req.FormValue("email") != "test@example.com" {
+			t.Errorf("Expected email 'test@example.com', got %s", req.FormValue("email"))
+		}
+	})
+
+	t.Run("with test client and VerifyRequest", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(200)
+			if _, err := w.Write([]byte(`{"success": true}`)); err != nil {
+				t.Errorf("Failed to write response: %v", err)
+			}
+		}))
+		defer server.Close()
+
+		client, err := New(TestSiteKeyAlwaysPass, TestSecretKeyAlwaysPass,
+			WithVerifyEndpoint(server.URL),
+		)
+		if err != nil {
+			t.Fatalf("Failed to create client: %v", err)
+		}
+
+		req := NewTestRequest(map[string]string{
+			"username": "testuser",
+		})
+
+		response, err := client.VerifyRequest(context.Background(), req)
+		if err != nil {
+			t.Fatalf("VerifyRequest failed: %v", err)
+		}
+
+		if response == nil || !response.Success {
+			t.Error("Expected successful verification")
+		}
+	})
+}
+
+func TestAddTestToken(t *testing.T) {
+	t.Run("add token to empty request", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(""))
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+
+		err := AddTestToken(req)
+		if err != nil {
+			t.Fatalf("AddTestToken failed: %v", err)
+		}
+
+		token := req.FormValue("cf-turnstile-response")
+		if token != TestToken {
+			t.Errorf("Expected token %s, got %s", TestToken, token)
+		}
+	})
+
+	t.Run("add token to request with existing form data", func(t *testing.T) {
+		formData := "username=testuser&email=test@example.com"
+		req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(formData))
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+
+		err := AddTestToken(req)
+		if err != nil {
+			t.Fatalf("AddTestToken failed: %v", err)
+		}
+
+		// Check the token was added
+		token := req.FormValue("cf-turnstile-response")
+		if token != TestToken {
+			t.Errorf("Expected token %s, got %s", TestToken, token)
+		}
+
+		// Check existing form data is preserved
+		if req.FormValue("username") != "testuser" {
+			t.Errorf("Expected username 'testuser', got %s", req.FormValue("username"))
+		}
+
+		if req.FormValue("email") != "test@example.com" {
+			t.Errorf("Expected email 'test@example.com', got %s", req.FormValue("email"))
+		}
+	})
+
+	t.Run("add token using url.Values", func(t *testing.T) {
+		form := url.Values{}
+		form.Set("username", "testuser")
+		form.Set("password", "secret123")
+
+		req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(form.Encode()))
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+
+		err := AddTestToken(req)
+		if err != nil {
+			t.Fatalf("AddTestToken failed: %v", err)
+		}
+
+		// Check the token was added
+		if req.FormValue("cf-turnstile-response") != TestToken {
+			t.Errorf("Expected token %s, got %s", TestToken, req.FormValue("cf-turnstile-response"))
+		}
+
+		// Check existing fields are preserved
+		if req.FormValue("username") != "testuser" {
+			t.Error("Existing form field 'username' was not preserved")
+		}
+		if req.FormValue("password") != "secret123" {
+			t.Error("Existing form field 'password' was not preserved")
+		}
+	})
+
+	t.Run("use with VerifyRequest", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(200)
+			if _, err := w.Write([]byte(`{"success": true}`)); err != nil {
+				t.Errorf("Failed to write response: %v", err)
+			}
+		}))
+		defer server.Close()
+
+		client, err := New(TestSiteKeyAlwaysPass, TestSecretKeyAlwaysPass,
+			WithVerifyEndpoint(server.URL),
+		)
+		if err != nil {
+			t.Fatalf("Failed to create client: %v", err)
+		}
+
+		// Create a request with existing form data
+		form := url.Values{}
+		form.Set("username", "testuser")
+		req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(form.Encode()))
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		req.RemoteAddr = "192.0.2.1:54321"
+
+		// Add the test token
+		err = AddTestToken(req)
+		if err != nil {
+			t.Fatalf("AddTestToken failed: %v", err)
+		}
+
+		// Verify the request
+		response, err := client.VerifyRequest(context.Background(), req)
+		if err != nil {
+			t.Fatalf("VerifyRequest failed: %v", err)
+		}
+
+		if response == nil || !response.Success {
+			t.Error("Expected successful verification")
+		}
+	})
+
+	t.Run("overwrites existing token", func(t *testing.T) {
+		formData := "cf-turnstile-response=old-token&username=test"
+		req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(formData))
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+
+		err := AddTestToken(req)
+		if err != nil {
+			t.Fatalf("AddTestToken failed: %v", err)
+		}
+
+		token := req.FormValue("cf-turnstile-response")
+		if token != TestToken {
+			t.Errorf("Expected token to be overwritten to %s, got %s", TestToken, token)
+		}
+
+		// Other fields should be preserved
+		if req.FormValue("username") != "test" {
+			t.Error("Existing form field 'username' was not preserved")
+		}
+	})
 }
