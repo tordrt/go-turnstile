@@ -1,6 +1,13 @@
 // Package turnstile provides a simple, thread-safe client for verifying Cloudflare Turnstile CAPTCHA tokens.
 package turnstile
 
+import (
+	"net/http"
+	"net/http/httptest"
+	"net/url"
+	"strings"
+)
+
 // Cloudflare provides dummy keys and tokens for testing Turnstile integrations.
 // These keys allow you to test your implementation without setting up a real Turnstile widget.
 // See: https://developers.cloudflare.com/turnstile/reference/testing/
@@ -95,4 +102,49 @@ func NewTestClientAlwaysFail(opts ...ClientOption) *Client {
 func NewTestClientTokenSpent(opts ...ClientOption) *Client {
 	client, _ := New(TestSiteKeyAlwaysPass, TestSecretKeyTokenSpent, opts...)
 	return client
+}
+
+// NewTestRequest creates an HTTP POST request with the Turnstile test token included
+// in the form data. This is useful for testing HTTP handlers that use VerifyRequest().
+//
+// The request includes:
+//   - The "cf-turnstile-response" form field set to TestToken
+//   - Any additional form fields provided in the formData parameter
+//   - Proper Content-Type header (application/x-www-form-urlencoded)
+//   - RemoteAddr set to "192.0.2.1:54321" (TEST-NET-1 reserved IP)
+//
+// Example:
+//
+//	func TestMyHTTPHandler(t *testing.T) {
+//		client := turnstile.NewTestClient()
+//
+//		// Create a test request with the Turnstile token and additional form data
+//		req := turnstile.NewTestRequest(map[string]string{
+//			"username": "testuser",
+//			"email":    "test@example.com",
+//		})
+//
+//		// Use VerifyRequest to test your handler
+//		response, err := client.VerifyRequest(req.Context(), req)
+//		if err != nil {
+//			t.Fatalf("Expected successful verification: %v", err)
+//		}
+//		// Continue testing your handler logic
+//	}
+func NewTestRequest(formData ...map[string]string) *http.Request {
+	form := url.Values{}
+	form.Set("cf-turnstile-response", TestToken)
+
+	// Add any additional form fields
+	if len(formData) > 0 {
+		for key, value := range formData[0] {
+			form.Set(key, value)
+		}
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.RemoteAddr = "192.0.2.1:54321" // TEST-NET-1 reserved IP address
+
+	return req
 }

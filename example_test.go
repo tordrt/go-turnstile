@@ -142,3 +142,30 @@ func ExampleNewTestClientTokenSpent() {
 		}
 	}
 }
+
+// This example demonstrates how to use NewTestRequest to test HTTP handlers
+// that use VerifyRequest(). This is the easiest way to test handlers that
+// process form submissions with Turnstile tokens.
+//
+// Note: This example uses test keys that interact with Cloudflare's real endpoint,
+// so it's shown for demonstration purposes only.
+func ExampleNewTestRequest() {
+	// Create a test client
+	testClient := turnstile.NewTestClient()
+
+	// Create a test request with the Turnstile token already included
+	// You can also add additional form fields
+	req := turnstile.NewTestRequest(map[string]string{
+		"username": "testuser",
+		"email":    "test@example.com",
+	})
+
+	// Verify the request - the test token is already in the request
+	response, err := testClient.VerifyRequest(context.Background(), req)
+	if err != nil {
+		log.Printf("Verification error: %v", err)
+		return
+	}
+
+	fmt.Printf("Verification successful: %v\n", response.Success)
+}

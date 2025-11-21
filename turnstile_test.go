@@ -663,3 +663,85 @@ func TestIntegration_WithRemoteIP(t *testing.T) {
 		t.Error("Expected token to be valid with remote IP")
 	}
 }
+
+func TestNewTestRequest(t *testing.T) {
+	t.Run("without additional form data", func(t *testing.T) {
+		req := NewTestRequest()
+
+		// Check the token is set
+		if err := req.ParseForm(); err != nil {
+			t.Fatalf("Failed to parse form: %v", err)
+		}
+
+		token := req.FormValue("cf-turnstile-response")
+		if token != TestToken {
+			t.Errorf("Expected token %s, got %s", TestToken, token)
+		}
+
+		// Check headers
+		if req.Header.Get("Content-Type") != "application/x-www-form-urlencoded" {
+			t.Error("Expected Content-Type to be application/x-www-form-urlencoded")
+		}
+
+		// Check RemoteAddr is set
+		if req.RemoteAddr == "" {
+			t.Error("Expected RemoteAddr to be set")
+		}
+	})
+
+	t.Run("with additional form data", func(t *testing.T) {
+		req := NewTestRequest(map[string]string{
+			"username": "testuser",
+			"email":    "test@example.com",
+		})
+
+		if err := req.ParseForm(); err != nil {
+			t.Fatalf("Failed to parse form: %v", err)
+		}
+
+		// Check the token is set
+		token := req.FormValue("cf-turnstile-response")
+		if token != TestToken {
+			t.Errorf("Expected token %s, got %s", TestToken, token)
+		}
+
+		// Check additional form fields
+		if req.FormValue("username") != "testuser" {
+			t.Errorf("Expected username 'testuser', got %s", req.FormValue("username"))
+		}
+
+		if req.FormValue("email") != "test@example.com" {
+			t.Errorf("Expected email 'test@example.com', got %s", req.FormValue("email"))
+		}
+	})
+
+	t.Run("with test client and VerifyRequest", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(200)
+			if _, err := w.Write([]byte(`{"success": true}`)); err != nil {
+				t.Errorf("Failed to write response: %v", err)
+			}
+		}))
+		defer server.Close()
+
+		client, err := New(TestSiteKeyAlwaysPass, TestSecretKeyAlwaysPass,
+			WithVerifyEndpoint(server.URL),
+		)
+		if err != nil {
+			t.Fatalf("Failed to create client: %v", err)
+		}
+
+		req := NewTestRequest(map[string]string{
+			"username": "testuser",
+		})
+
+		response, err := client.VerifyRequest(context.Background(), req)
+		if err != nil {
+			t.Fatalf("VerifyRequest failed: %v", err)
+		}
+
+		if response == nil || !response.Success {
+			t.Error("Expected successful verification")
+		}
+	})
+}

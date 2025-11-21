@@ -213,6 +213,8 @@ This library provides convenient test helpers that make it easy to test your Tur
 
 ### Quick Start - Testing
 
+Testing handlers that use `VerifyRequest()` is simple with the provided test helpers:
+
 ```go
 import (
     "testing"
@@ -224,8 +226,13 @@ func TestMyHandler(t *testing.T) {
     // Create a test client that always passes verification
     client := turnstile.NewTestClient()
 
-    // Use the test token to verify
-    response, err := client.VerifyToken(context.Background(), turnstile.TestToken)
+    // Create a test request with the Turnstile token already included
+    req := turnstile.NewTestRequest(map[string]string{
+        "username": "testuser",
+    })
+
+    // Verify the request
+    response, err := client.VerifyRequest(context.Background(), req)
     if err != nil {
         t.Fatalf("Expected successful verification: %v", err)
     }
@@ -233,6 +240,18 @@ func TestMyHandler(t *testing.T) {
     // Test your handler logic with a valid token
     if !response.Success {
         t.Error("Expected successful response")
+    }
+}
+```
+
+Or if you're testing direct token verification:
+
+```go
+func TestTokenVerification(t *testing.T) {
+    client := turnstile.NewTestClient()
+    response, err := client.VerifyToken(context.Background(), turnstile.TestToken)
+    if err != nil {
+        t.Fatalf("Expected successful verification: %v", err)
     }
 }
 ```
@@ -280,6 +299,37 @@ func TestHandlerDuplicateToken(t *testing.T) {
     }
     // Test your duplicate submission handling
 }
+```
+
+### Testing HTTP Handlers with VerifyRequest()
+
+For handlers that use `VerifyRequest()`, the library provides `NewTestRequest()` which creates a complete HTTP request with the test token already included:
+
+```go
+func TestHTTPHandler(t *testing.T) {
+    client := turnstile.NewTestClient()
+
+    // Create a test request with the Turnstile token and additional form data
+    req := turnstile.NewTestRequest(map[string]string{
+        "username": "testuser",
+        "email":    "test@example.com",
+    })
+
+    // Verify using VerifyRequest - the test token is already in the request
+    response, err := client.VerifyRequest(context.Background(), req)
+    if err != nil {
+        t.Fatalf("Expected successful verification: %v", err)
+    }
+
+    // Now test your handler logic
+    // ...
+}
+```
+
+You can also create a request without additional form data:
+
+```go
+req := turnstile.NewTestRequest()  // Just includes the Turnstile token
 ```
 
 ### Test Constants
