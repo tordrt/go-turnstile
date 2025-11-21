@@ -87,3 +87,58 @@ func ExampleClient_VerifyToken() {
 	fmt.Println("CAPTCHA verification successful")
 	// Proceed with form processing
 }
+
+// This example demonstrates how to use the test client for unit testing.
+// This is the recommended approach for testing your Turnstile handler code.
+//
+// Note: This example uses test keys that interact with Cloudflare's real endpoint,
+// so it's shown for demonstration purposes only.
+func ExampleNewTestClient() {
+	// Create a test client that always passes verification
+	testClient := turnstile.NewTestClient()
+
+	// Use the test token provided by Cloudflare
+	// In your real tests, you would use this in your handler test code
+	response, err := testClient.VerifyToken(context.Background(), turnstile.TestToken)
+	if err != nil {
+		// In real usage, handle errors appropriately
+		log.Printf("Verification error: %v", err)
+		return
+	}
+
+	fmt.Printf("Test verification successful: %v\n", response.Success)
+}
+
+// This example demonstrates testing error handling when Turnstile verification fails.
+//
+// Note: This example uses test keys that interact with Cloudflare's real endpoint,
+// so it's shown for demonstration purposes only.
+func ExampleNewTestClientAlwaysFail() {
+	// Create a test client that always fails verification
+	testClient := turnstile.NewTestClientAlwaysFail()
+
+	// This will fail even with the test token
+	_, err := testClient.VerifyToken(context.Background(), turnstile.TestToken)
+	if err != nil {
+		fmt.Println("Verification failed as expected")
+		// Test your error handling code here
+	}
+}
+
+// This example demonstrates testing duplicate token handling.
+//
+// Note: This example uses test keys that interact with Cloudflare's real endpoint,
+// so it's shown for demonstration purposes only.
+func ExampleNewTestClientTokenSpent() {
+	// Create a test client that simulates "token already spent" errors
+	testClient := turnstile.NewTestClientTokenSpent()
+
+	_, err := testClient.VerifyToken(context.Background(), turnstile.TestToken)
+	if err != nil {
+		var timeoutErr turnstile.ErrTimeoutOrDuplicate
+		if errors.As(err, &timeoutErr) {
+			fmt.Println("Detected duplicate token submission")
+			// Test your duplicate submission handling here
+		}
+	}
+}

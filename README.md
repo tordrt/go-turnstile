@@ -209,23 +209,140 @@ Here's a complete HTML form example:
 
 ## Testing
 
-Cloudflare provides dummy site keys and secret keys for testing and development. These keys allow you to test your integration without setting up a real Turnstile widget.
+This library provides convenient test helpers that make it easy to test your Turnstile integration without setting up real Cloudflare keys or widgets. The test clients use [Cloudflare's official dummy keys](https://developers.cloudflare.com/turnstile/reference/testing/) under the hood.
 
-For the complete list of test keys and their behaviors, see: [Cloudflare Turnstile Test Keys](https://developers.cloudflare.com/turnstile/reference/testing/)
-
-### Example Test Usage
+### Quick Start - Testing
 
 ```go
-func TestTurnstileVerification(t *testing.T) {
-    // Use Cloudflare's dummy keys for testing
-    // See: https://developers.cloudflare.com/turnstile/reference/testing/
-    client, err := turnstile.New("test-site-key", "test-secret-key")
-    assert.NoError(t, err)
-    
-    response, err := client.VerifyToken(context.TODO(), "dummy-token", "127.0.0.1")
-    // Result depends on which test keys you use
+import (
+    "testing"
+    "context"
+    "github.com/tordrt/go-turnstile"
+)
+
+func TestMyHandler(t *testing.T) {
+    // Create a test client that always passes verification
+    client := turnstile.NewTestClient()
+
+    // Use the test token to verify
+    response, err := client.VerifyToken(context.Background(), turnstile.TestToken)
+    if err != nil {
+        t.Fatalf("Expected successful verification: %v", err)
+    }
+
+    // Test your handler logic with a valid token
+    if !response.Success {
+        t.Error("Expected successful response")
+    }
 }
 ```
+
+### Test Client Types
+
+The library provides three test client constructors for different testing scenarios:
+
+#### 1. NewTestClient() - Success Case Testing
+Creates a client that always passes verification. Use this to test your happy path logic.
+
+```go
+func TestHandlerSuccess(t *testing.T) {
+    client := turnstile.NewTestClient()
+    response, err := client.VerifyToken(context.Background(), turnstile.TestToken)
+    // err will be nil, response.Success will be true
+}
+```
+
+#### 2. NewTestClientAlwaysFail() - Failure Case Testing
+Creates a client that always fails verification. Use this to test your error handling.
+
+```go
+func TestHandlerFailure(t *testing.T) {
+    client := turnstile.NewTestClientAlwaysFail()
+    _, err := client.VerifyToken(context.Background(), turnstile.TestToken)
+    // err will not be nil - test your error handling here
+    if err == nil {
+        t.Fatal("Expected verification to fail")
+    }
+}
+```
+
+#### 3. NewTestClientTokenSpent() - Duplicate Token Testing
+Creates a client that returns a "token already spent" error. Use this to test replay attack protection.
+
+```go
+func TestHandlerDuplicateToken(t *testing.T) {
+    client := turnstile.NewTestClientTokenSpent()
+    _, err := client.VerifyToken(context.Background(), turnstile.TestToken)
+
+    var timeoutErr turnstile.ErrTimeoutOrDuplicate
+    if !errors.As(err, &timeoutErr) {
+        t.Fatal("Expected timeout-or-duplicate error")
+    }
+    // Test your duplicate submission handling
+}
+```
+
+### Test Constants
+
+The library exports the following test constants for use in your tests:
+
+| Constant | Description |
+|----------|-------------|
+| `turnstile.TestToken` | Dummy response token accepted by all test clients |
+| `turnstile.TestSiteKeyAlwaysPass` | Dummy sitekey that always passes (visible) |
+| `turnstile.TestSiteKeyAlwaysBlock` | Dummy sitekey that always blocks (visible) |
+| `turnstile.TestSiteKeyAlwaysPassInvisible` | Dummy sitekey that always passes (invisible) |
+| `turnstile.TestSiteKeyAlwaysBlockInvisible` | Dummy sitekey that always blocks (invisible) |
+| `turnstile.TestSiteKeyForceChallenge` | Dummy sitekey that forces interactive challenge |
+| `turnstile.TestSecretKeyAlwaysPass` | Dummy secret key that always passes |
+| `turnstile.TestSecretKeyAlwaysFail` | Dummy secret key that always fails |
+| `turnstile.TestSecretKeyTokenSpent` | Dummy secret key that returns "token spent" error |
+
+### Complete Test Example
+
+```go
+func TestTurnstileHandler(t *testing.T) {
+    tests := []struct {
+        name        string
+        client      *turnstile.Client
+        expectError bool
+    }{
+        {
+            name:        "successful verification",
+            client:      turnstile.NewTestClient(),
+            expectError: false,
+        },
+        {
+            name:        "failed verification",
+            client:      turnstile.NewTestClientAlwaysFail(),
+            expectError: true,
+        },
+        {
+            name:        "duplicate token",
+            client:      turnstile.NewTestClientTokenSpent(),
+            expectError: true,
+        },
+    }
+
+    for _, tt := range tests {
+        t.Run(tt.name, func(t *testing.T) {
+            response, err := tt.client.VerifyToken(
+                context.Background(),
+                turnstile.TestToken,
+            )
+
+            if tt.expectError && err == nil {
+                t.Error("Expected error but got none")
+            }
+            if !tt.expectError && err != nil {
+                t.Errorf("Unexpected error: %v", err)
+            }
+        })
+    }
+}
+```
+
+For more examples, see the [example_test.go](example_test.go) file.
 
 ## Contributing
 
