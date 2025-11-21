@@ -403,6 +403,11 @@ func (c *Client) doVerifyRequest(ctx context.Context, token string, remoteIP ...
 		_ = result.Body.Close()
 	}()
 
+	// Check HTTP status code before attempting to decode JSON
+	if result.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("unexpected HTTP status: %d %s", result.StatusCode, result.Status)
+	}
+
 	var response Response
 	if err := json.NewDecoder(result.Body).Decode(&response); err != nil {
 		return nil, fmt.Errorf("failed to decode response: %w", err)
